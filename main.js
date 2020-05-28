@@ -1,8 +1,3 @@
-//スプレッドシート
-var SHEET = SpreadsheetApp.getActiveSheet();
-//スプレッドシートの最終列+1
-var INPUT_COLUMN = SHEET.getLastColumn();
-
 var service = getService();
 
 /**
@@ -11,12 +6,16 @@ var service = getService();
 function run() {
   
   if (service.hasAccess()) {
+    //スプレッドシート
+    var sheet = SpreadsheetApp.getActiveSheet();
+    //スプレッドシートの最終列+1
+    var input_column = sheet.getLastColumn();
+
     //今月分の開始・終了日
-    var startDate = SHEET.getRange(1,INPUT_COLUMN).getValue();
-    var endDate = SHEET.getRange(2,INPUT_COLUMN).getValue();
+    var startDate = sheet.getRange(1,input_column).getValue();
+    var endDate = sheet.getRange(2,input_column).getValue();
     //API投入用のパラメータ文字列
     var dateParam = '&start_date='+ startDate + '&end_date=' + endDate + '&mode=payment';
-
     /**
      * カテゴリ番号の配列化
      */
@@ -29,12 +28,12 @@ function run() {
     //妻支出のジャンル番号
     var wife_payment_arr = ['2512219'];
       
-    SHEET.getRange(20,INPUT_COLUMN).setValue(settlement(grocery_cat_arr,dateParam,true));
-    SHEET.getRange(21,INPUT_COLUMN).setValue(settlement(living_cat_arr,dateParam,true));
-    SHEET.getRange(22,INPUT_COLUMN).setValue(settlement(util_cat_arr,dateParam,true));
-    SHEET.getRange(25,INPUT_COLUMN).setValue(settlement(wife_payment_arr,dateParam,false));
+    sheet.getRange(20,input_column).setValue(settlement(grocery_cat_arr,dateParam,true));
+    sheet.getRange(21,input_column).setValue(settlement(living_cat_arr,dateParam,true));
+    sheet.getRange(22,input_column).setValue(settlement(util_cat_arr,dateParam,true));
+    sheet.getRange(25,input_column).setValue(settlement(wife_payment_arr,dateParam,false));
 
-    slackInform(SHEET.getRange(27,INPUT_COLUMN).getValue());
+    slackInform(sheet.getRange(27,input_column).getValue());
     
   } else {
     var authorizationUrl = service.authorize();
@@ -44,55 +43,32 @@ function run() {
 } 
 
 /**
- * 日付の自動入力
- */
-function inputDate(){
-  var firstDate = new Date();
-  firstDate.setMonth(firstDate.getMonth()-1);
-  firstDate.setDate(1);
-  SHEET.getRange(1,INPUT_COLUMN).setValue(firstDate);
-
-  var lastDate = new Date();
-  lastDate.setDate(0);
-  SHEET.getRange(2,INPUT_COLUMN).setValue(lastDate);
-}
-
-/**
  * Zaim APIから支払いデータを取ってくる関数
  * @param String dateparam 
  */
 function settlement(catArr,dateParam,cat_flag){
   //そのセグメントの合計金額
   var total = 0;
-
   //ZaimAPIのURL
   var url = 'https://api.zaim.net/v2/home/money?mapping=1';
-
   //カテゴリかジャンルかの判別
   if(cat_flag){
     url = url + '&category_id=';
   }else{
     url = url + '&genre_id=';
   }
-  
 
-catArr.forEach(function (catNum) {
-  //カテゴリごとに算出
-  Logger.log('========'+catNum+'========');
-  var param =  catNum + dateParam;
-  var urlp = url+param;
-  Logger.log(urlp);
-  var response = service.fetch(urlp, {
-    method: 'get'
-  });
-    
-  Logger.log(response.getContentText());
-  Logger.log('=====================')
+  catArr.forEach(function (catNum) {
+    //カテゴリごとに算出
+    var param =  catNum + dateParam;
+    var urlp = url+param;
+    var response = service.fetch(urlp, {
+      method: 'get'
+    });
   
-  var result = JSON.parse(response.getContentText());
-  total += getTotalPay(result);
+    var result = JSON.parse(response.getContentText());
+    total += getTotalPay(result);
   });
-
   return total;
 }
 
@@ -102,13 +78,11 @@ catArr.forEach(function (catNum) {
  */
 function getTotalPay(result){
   var sum = 0;
-  //Logger.log(result);
 
   for(var i = 0; i< result.money.length; i++){
     var num = result.money[i].amount;
     sum += num;
   }
-
   return sum;
 }
 
@@ -118,12 +92,11 @@ function getTotalPay(result){
  */
 function slackInform(amount){
   amount = Math.round(amount);
-  //夫婦Slackのgeneralに算出金額を送る
+  //夫婦Slackの#generalに算出金額を送る
   var slackToken = PropertiesService.getScriptProperties().getProperty('SLACK_TOKEN');
   var slackApp = SlackApp.create(slackToken);
   var channelId = '#general';
   var message = '今月の精算： `¥'+amount+'` です！よろしくね！';
 
   var response = slackApp.postMessage(channelId,message);
-  Logger.log(response);
 }
